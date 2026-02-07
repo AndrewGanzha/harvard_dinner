@@ -88,3 +88,8 @@ class App {
 }
 
 export default App;
+
+if (require.main === module) {
+  const server = new App();
+  server.listen();
+}

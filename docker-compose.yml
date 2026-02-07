@@ -1,8 +1,8 @@
-version: "3.8"
-
 services:
   backend:
-    build: .
+    build:
+      context: .
+      target: base
     container_name: harvard-plate-backend
     ports:
       - "3001:3001"
