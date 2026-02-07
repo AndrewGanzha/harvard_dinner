@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from "express";
-import { supabaseService } from "../services/supabase/supabase.service";
+import { mysqlService } from "../services/mysql/mysql.service";
 import { AppError } from "../middleware/error.middleware";
 import { z } from "zod";
+import { parseTelegramId } from "../utils/telegram";
 
 const SavePlateSchema = z.object({
-  userId: z.string().uuid(),
+  userId: z.number().int().positive().optional(),
   ingredients: z
     .array(
       z.object({
@@ -25,9 +26,18 @@ export class PlateController {
         throw new AppError("Неверные данные запроса", 400, true, parsed.error);
       }
 
+      const telegramId = req.user?.telegram_id;
+      if (!telegramId) {
+        throw new AppError("Требуется аутентификация Telegram", 401);
+      }
+
       const { userId, ingredients, name, recipeData } = parsed.data;
-      const plate = await supabaseService.saveUserPlate(
-        userId,
+      if (userId && userId !== telegramId) {
+        throw new AppError("Нет доступа", 403);
+      }
+
+      const plate = await mysqlService.saveUserPlate(
+        telegramId,
         ingredients,
         name,
         recipeData,
@@ -45,12 +55,17 @@ export class PlateController {
 
   async getUserPlates(req: Request, res: Response, next: NextFunction) {
     try {
-      const { userId } = req.params;
-      if (!userId) {
+      const { userId } = req.params as { userId: string };
+      const telegramId = parseTelegramId(userId);
+      if (!telegramId) {
         throw new AppError("ID пользователя обязателен", 400);
       }
 
-      const plates = await supabaseService.getUserPlates(userId);
+      if (req.user?.telegram_id !== telegramId) {
+        throw new AppError("Нет доступа", 403);
+      }
+
+      const plates = await mysqlService.getUserPlates(telegramId);
       res.status(200).json({ success: true, data: plates });
     } catch (error) {
       next(error);
@@ -59,12 +74,20 @@ export class PlateController {
 
   async deleteUserPlate(req: Request, res: Response, next: NextFunction) {
     try {
-      const { userId, plateId } = req.params;
-      if (!userId || !plateId) {
+      const { userId, plateId } = req.params as {
+        userId: string;
+        plateId: string;
+      };
+      const telegramId = parseTelegramId(userId);
+      if (!telegramId || !plateId) {
         throw new AppError("ID пользователя и тарелки обязательны", 400);
       }
 
-      const ok = await supabaseService.deleteUserPlate(userId, plateId);
+      if (req.user?.telegram_id !== telegramId) {
+        throw new AppError("Нет доступа", 403);
+      }
+
+      const ok = await mysqlService.deleteUserPlate(telegramId, plateId);
       if (!ok) {
         throw new AppError("Не удалось удалить тарелку", 500);
       }

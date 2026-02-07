@@ -1,9 +1,10 @@
 declare namespace Express {
   export interface Request {
     user?: {
-      id: string;
-      telegram_id?: number;
-      email?: string;
+      telegram_id: number;
+      username?: string;
+      first_name?: string;
+      last_name?: string;
     };
   }
 }

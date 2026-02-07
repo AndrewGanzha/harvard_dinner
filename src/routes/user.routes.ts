@@ -5,7 +5,7 @@ import { authenticate } from "../middleware/auth.middleware";
 const router = Router();
 
 // Создать или получить пользователя по telegram_id
-router.post("/", userController.createOrGetUser);
+router.post("/", authenticate, userController.createOrGetUser);
 
 // Получить информацию о пользователе
 router.get("/:userId", authenticate, userController.getUserInfo);

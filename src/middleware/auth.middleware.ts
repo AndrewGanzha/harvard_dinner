@@ -1,5 +1,80 @@
 import { Request, Response, NextFunction } from "express";
-import { supabaseService } from "../services/supabase/supabase.service";
+import crypto from "crypto";
+
+type TelegramUser = {
+  id: number;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+};
+
+type InitDataValidationResult =
+  | { ok: true; user: TelegramUser }
+  | { ok: false; error: string };
+
+const TELEGRAM_TTL_SECONDS = Number(
+  process.env.TELEGRAM_AUTH_TTL_SECONDS || 86400,
+);
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+
+const parseInitData = (initData: string): InitDataValidationResult => {
+  if (!TELEGRAM_BOT_TOKEN) {
+    return { ok: false, error: "BOT_TOKEN_MISSING" };
+  }
+
+  const params = new URLSearchParams(initData);
+  const hash = params.get("hash");
+  const authDateRaw = params.get("auth_date");
+  const userRaw = params.get("user");
+
+  if (!hash || !authDateRaw || !userRaw) {
+    return { ok: false, error: "INIT_DATA_INCOMPLETE" };
+  }
+
+  const authDate = Number(authDateRaw);
+  if (!Number.isFinite(authDate)) {
+    return { ok: false, error: "AUTH_DATE_INVALID" };
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  if (now - authDate > TELEGRAM_TTL_SECONDS) {
+    return { ok: false, error: "INIT_DATA_EXPIRED" };
+  }
+
+  const dataCheckString = [...params.entries()]
+    .filter(([key]) => key !== "hash")
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n");
+
+  const secretKey = crypto
+    .createHmac("sha256", "WebAppData")
+    .update(TELEGRAM_BOT_TOKEN)
+    .digest();
+  const computedHash = crypto
+    .createHmac("sha256", secretKey)
+    .update(dataCheckString)
+    .digest("hex");
+
+  const computedBuffer = Buffer.from(computedHash, "hex");
+  const receivedBuffer = Buffer.from(hash, "hex");
+  if (
+    computedBuffer.length !== receivedBuffer.length ||
+    !crypto.timingSafeEqual(computedBuffer, receivedBuffer)
+  ) {
+    return { ok: false, error: "HASH_MISMATCH" };
+  }
+
+  try {
+    const user = JSON.parse(userRaw) as TelegramUser;
+    if (!user?.id) {
+      return { ok: false, error: "USER_MISSING" };
+    }
+    return { ok: true, user };
+  } catch (_error) {
+    return { ok: false, error: "USER_PARSE_ERROR" };
+  }
+};
 
 export const authenticate = async (
   req: Request,
@@ -7,30 +82,29 @@ export const authenticate = async (
   next: NextFunction,
 ) => {
   try {
-    const token = req.headers.authorization?.replace("Bearer ", "");
+    const initData = req.headers["x-telegram-init-data"];
 
-    if (!token) {
+    if (!initData || typeof initData !== "string") {
       return res.status(401).json({
-        error: "Требуется аутентификация",
-        code: "AUTH_REQUIRED",
+        error: "Требуется аутентификация Telegram",
+        code: "TELEGRAM_AUTH_REQUIRED",
       });
     }
 
-    const {
-      data: { user },
-      error,
-    } = await supabaseService.getClient().auth.getUser(token);
+    const result = parseInitData(initData);
 
-    if (error || !user) {
+    if (!result.ok) {
       return res.status(401).json({
-        error: "Неверный или просроченный токен",
-        code: "INVALID_TOKEN",
+        error: "Неверные данные Telegram",
+        code: result.error,
       });
     }
 
     req.user = {
-      id: user.id,
-      email: user.email || undefined,
+      telegram_id: result.user.id,
+      username: result.user.username,
+      first_name: result.user.first_name,
+      last_name: result.user.last_name,
     };
 
     next();
@@ -41,19 +115,4 @@ export const authenticate = async (
       code: "AUTH_ERROR",
     });
   }
-};
-
-// Упрощенная аутентификация для MVP (без JWT)
-export const simpleAuth = (req: Request, res: Response, next: NextFunction) => {
-  const userId = req.headers["x-user-id"] || req.body.userId;
-
-  if (!userId) {
-    return res.status(401).json({
-      error: "Требуется идентификатор пользователя",
-      code: "USER_ID_REQUIRED",
-    });
-  }
-
-  req.user = { id: userId as string };
-  next();
 };

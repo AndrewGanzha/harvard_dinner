@@ -1,11 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { gigaChatService } from "../services/gigachat/gigachat.service";
-import { supabaseService } from "../services/supabase/supabase.service";
+import { mysqlService } from "../services/mysql/mysql.service";
+import { AppError } from "../middleware/error.middleware";
+import { parseTelegramId } from "../utils/telegram";
 
 // Схемы валидации
 export const RecipeRequestSchema = z.object({
-  userId: z.string().uuid(),
+  userId: z.number().int().positive().optional(),
   ingredients: z
     .array(
       z.object({
@@ -35,6 +37,14 @@ export class RecipeController {
       }
 
       const requestData = validationResult.data;
+      const telegramId = req.user?.telegram_id;
+      if (!telegramId) {
+        throw new AppError("Требуется аутентификация Telegram", 401);
+      }
+
+      if (requestData.userId && requestData.userId !== telegramId) {
+        throw new AppError("Нет доступа", 403);
+      }
 
       const isGigaChatAvailable = await gigaChatService.checkAvailability();
       if (!isGigaChatAvailable) {
@@ -45,16 +55,16 @@ export class RecipeController {
 
       const recipe = await gigaChatService.generateRecipe(requestData);
 
-      await supabaseService.logRecipeRequest(
-        requestData.userId,
+      await mysqlService.logRecipeRequest(
+        telegramId,
         requestData,
         recipe,
         recipe.usage,
       );
 
       if (req.query.savePlate === "true") {
-        await supabaseService.saveUserPlate(
-          requestData.userId,
+        await mysqlService.saveUserPlate(
+          telegramId,
           requestData.ingredients,
           recipe.title,
           recipe,
@@ -80,17 +90,23 @@ export class RecipeController {
    */
   async getRecipeHistory(req: Request, res: Response, next: NextFunction) {
     try {
-      const { userId } = req.params;
+      const { userId } = req.params as { userId: string };
       const limit = parseInt(req.query.limit as string, 10) || 20;
       const page = parseInt(req.query.page as string, 10) || 1;
 
-      if (!userId) {
-        return res.status(400).json({
-          error: "ID пользователя обязателен",
-        });
+      const telegramId = parseTelegramId(userId);
+      if (!telegramId) {
+        throw new AppError("ID пользователя обязателен", 400);
       }
 
-      const history = await supabaseService.getUserRecipeHistory(userId, limit);
+      if (req.user?.telegram_id !== telegramId) {
+        throw new AppError("Нет доступа", 403);
+      }
+
+      const history = await mysqlService.getUserRecipeHistory(
+        telegramId,
+        limit,
+      );
 
       res.status(200).json({
         success: true,
@@ -111,7 +127,7 @@ export class RecipeController {
    */
   async regenerateRecipe(req: Request, res: Response, next: NextFunction) {
     try {
-      const { historyId } = req.params;
+      const { historyId } = req.params as { historyId: string };
 
       if (!historyId) {
         return res.status(400).json({
@@ -119,21 +135,18 @@ export class RecipeController {
         });
       }
 
-      const { data: historyItem, error } = await supabaseService
-        .getClient()
-        .from("recipe_history")
-        .select("*")
-        .eq("id", historyId)
-        .single();
-
-      if (error || !historyItem) {
+      const historyItem = await mysqlService.getRecipeHistoryItem(historyId);
+      if (!historyItem) {
         return res.status(404).json({
           error: "История не найдена",
         });
       }
 
-      const requestUser = (req as any).user;
-      if (requestUser?.id && historyItem.user_id !== requestUser.id) {
+      const requestUser = req.user;
+      if (
+        requestUser?.telegram_id &&
+        historyItem.telegram_id !== requestUser.telegram_id
+      ) {
         return res.status(403).json({
           error: "Нет доступа к этой истории",
         });

@@ -2,7 +2,10 @@ import request from "supertest";
 import App from "../src/app";
 
 jest.mock("../src/middleware/auth.middleware", () => ({
-  authenticate: (_req: any, _res: any, next: any) => next(),
+  authenticate: (req: any, _res: any, next: any) => {
+    req.user = { telegram_id: 100000001 };
+    next();
+  },
 }));
 
 jest.mock("../src/services/gigachat/gigachat.service", () => ({
@@ -32,8 +35,8 @@ jest.mock("../src/services/gigachat/gigachat.service", () => ({
   },
 }));
 
-jest.mock("../src/services/supabase/supabase.service", () => ({
-  supabaseService: {
+jest.mock("../src/services/mysql/mysql.service", () => ({
+  mysqlService: {
     logRecipeRequest: async () => undefined,
   },
 }));
@@ -47,7 +50,6 @@ describe("Recipe API", () => {
         .post("/api/recipes/generate")
         .set("Authorization", "Bearer test-token")
         .send({
-          userId: "550e8400-e29b-41d4-a716-446655440000",
           ingredients: [
             { name: "Помидор", category: "vegetable" },
             { name: "Огурец", category: "vegetable" },

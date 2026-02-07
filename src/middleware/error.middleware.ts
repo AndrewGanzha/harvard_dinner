@@ -26,7 +26,7 @@ export const errorHandler = (
     path: req.path,
     method: req.method,
     body: req.body,
-    user: req.user?.id,
+    user: req.user?.telegram_id,
   });
 
   if (err instanceof ZodError) {

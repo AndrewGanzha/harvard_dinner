@@ -5,21 +5,18 @@
 - Продакшен: `https://api.harvard-plate.com`
 - Локально: `http://localhost:3001`
 
-## Аутентификация
+## Аутентификация (Telegram Mini Apps)
 
-**Login**
+**Заголовок**
 ```
-POST /api/auth/login
-{
-  "telegram_id": 123456789,
-  "username": "john_doe"
-}
+X-Telegram-Init-Data: <raw initData>
 ```
 
-**Использование токена**
-```
-Authorization: Bearer <ваш_токен>
-```
+`initData` должен передаваться на каждом запросе. Сервер проверяет подпись и `auth_date`.
+
+## Идентификаторы пользователей
+
+`userId` в API = **telegram_id** пользователя (BIGINT).
 
 ## Эндпоинты
 
@@ -33,7 +30,6 @@ POST /api/recipes/generate
 Пример тела запроса:
 ```json
 {
-  "userId": "uuid-пользователя",
   "ingredients": [
     {
       "name": "Помидор",
@@ -52,6 +48,11 @@ GET /api/recipes/history/:userId?limit=20&page=1
 ```
 
 ### Пользователи
+
+**Создать/получить пользователя из Telegram**
+```
+POST /api/users
+```
 
 **Получение информации**
 ```
@@ -78,7 +79,6 @@ POST /api/users/:userId/ingredients
 ```
 POST /api/plates
 {
-  "userId": "uuid",
   "ingredients": [...],
   "name": "Моя тарелка"
 }
@@ -87,6 +87,14 @@ POST /api/plates
 **Получение сохраненных тарелок**
 ```
 GET /api/plates/:userId
+```
+
+## Docker и миграции
+
+```
+docker compose up -d
+npm run db:migrate
+npm run db:seed
 ```
 
 ## Коды ошибок

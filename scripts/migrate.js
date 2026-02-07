@@ -12,12 +12,13 @@ const migrationsDir = path.join(
   projectRoot,
   "src",
   "services",
-  "supabase",
+  "mysql",
   "migrations",
 );
 
-const dbUser = process.env.SUPABASE_DB_USER || "postgres";
-const dbName = process.env.SUPABASE_DB_NAME || "postgres";
+const dbUser = process.env.MYSQL_USER;
+const dbPassword = process.env.MYSQL_PASSWORD;
+const dbName = process.env.MYSQL_DATABASE;
 
 function runDockerCompose(args, options = {}) {
   const result = spawnSync("docker", ["compose", ...args], {
@@ -34,69 +35,62 @@ function runDockerCompose(args, options = {}) {
   return result.stdout ? result.stdout.trim() : "";
 }
 
-function runPsqlSql(sql) {
+function runMysqlSql(sql) {
   return runDockerCompose(
     [
       "exec",
       "-T",
-      "supabase-db",
-      "psql",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-U",
+      "mysql",
+      "mysql",
+      "-N",
+      "-B",
+      "-u",
       dbUser,
-      "-d",
       dbName,
-      "-t",
-      "-A",
-      "-c",
+      "-e",
       sql,
     ],
-    { stdio: ["ignore", "pipe", "pipe"] },
+    {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, MYSQL_PWD: dbPassword },
+    },
   );
 }
 
 function applyMigrationSql(sql) {
   runDockerCompose(
-    [
-      "exec",
-      "-T",
-      "supabase-db",
-      "psql",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-U",
-      dbUser,
-      "-d",
-      dbName,
-    ],
-    { input: sql, stdio: ["pipe", "pipe", "pipe"] },
+    ["exec", "-T", "mysql", "mysql", "-u", dbUser, dbName],
+    {
+      input: sql,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, MYSQL_PWD: dbPassword },
+    },
   );
 }
 
 function ensureDbRunning() {
   const services = runDockerCompose(["ps", "--services", "--filter", "status=running"]);
   const running = services.split("\n").map((line) => line.trim());
-  if (!running.includes("supabase-db")) {
+  if (!running.includes("mysql")) {
     throw new Error(
-      "Container supabase-db is not running. Start stack first: docker compose up -d",
+      "Container mysql is not running. Start stack first: docker compose up -d",
     );
   }
 }
 
 function ensureMigrationsTable() {
-  runPsqlSql(`
-    create table if not exists public.schema_migrations (
-      version text primary key,
-      applied_at timestamptz not null default now()
+  runMysqlSql(`
+    create table if not exists schema_migrations (
+      version varchar(255) primary key,
+      applied_at datetime not null default current_timestamp
     );
   `);
 }
 
 function getAppliedMigrations() {
-  const out = runPsqlSql(`
+  const out = runMysqlSql(`
     select version
-    from public.schema_migrations
+    from schema_migrations
     order by version;
   `);
 
@@ -106,10 +100,10 @@ function getAppliedMigrations() {
 
 function recordMigration(version) {
   const escaped = version.replace(/'/g, "''");
-  runPsqlSql(`
-    insert into public.schema_migrations (version)
+  runMysqlSql(`
+    insert into schema_migrations (version)
     values ('${escaped}')
-    on conflict (version) do nothing;
+    on duplicate key update version = version;
   `);
 }
 
@@ -125,6 +119,10 @@ function getMigrationFiles() {
 }
 
 function main() {
+  if (!dbUser || !dbPassword || !dbName) {
+    throw new Error("MySQL credentials are missing in environment variables.");
+  }
+
   ensureDbRunning();
   ensureMigrationsTable();
 

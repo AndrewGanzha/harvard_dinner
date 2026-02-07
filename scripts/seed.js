@@ -7,15 +7,20 @@ const dotenv = require("dotenv");
 dotenv.config();
 
 const projectRoot = path.resolve(__dirname, "..");
-const dbUser = process.env.SUPABASE_DB_USER || "postgres";
-const dbName = process.env.SUPABASE_DB_NAME || "postgres";
+const dbUser = process.env.MYSQL_USER;
+const dbPassword = process.env.MYSQL_PASSWORD;
+const dbName = process.env.MYSQL_DATABASE;
 
 const sql = `
-insert into public.users (telegram_id, username, email)
+insert into users (telegram_id, username, email)
 values (100000001, 'demo_user', 'demo@example.com')
-on conflict (telegram_id) do update
-set username = excluded.username;
+on duplicate key update username = values(username);
 `;
+
+if (!dbUser || !dbPassword || !dbName) {
+  console.error("MySQL credentials are missing in environment variables.");
+  process.exit(1);
+}
 
 const result = spawnSync(
   "docker",
@@ -23,19 +28,17 @@ const result = spawnSync(
     "compose",
     "exec",
     "-T",
-    "supabase-db",
-    "psql",
-    "-v",
-    "ON_ERROR_STOP=1",
-    "-U",
+    "mysql",
+    "mysql",
+    "-u",
     dbUser,
-    "-d",
     dbName,
   ],
   {
     cwd: projectRoot,
     input: sql,
     encoding: "utf8",
+    env: { ...process.env, MYSQL_PWD: dbPassword },
   },
 );
 

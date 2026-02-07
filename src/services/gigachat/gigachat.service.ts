@@ -11,7 +11,7 @@ export interface GigaChatMessage {
 }
 
 export interface RecipeGenerationRequest {
-  userId: string;
+  userId?: number;
   ingredients: Array<{
     name: string;
     category: "vegetable" | "grain" | "protein" | "fat";

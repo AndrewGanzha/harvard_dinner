@@ -1,28 +1,24 @@
 import { Request, Response, NextFunction } from "express";
-import { supabaseService } from "../services/supabase/supabase.service";
+import { mysqlService } from "../services/mysql/mysql.service";
 import { AppError } from "../middleware/error.middleware";
 import { z } from "zod";
+import { parseTelegramId } from "../utils/telegram";
 
 const IngredientSchema = z.object({
   name: z.string().min(1).max(100),
   category: z.enum(["vegetable", "grain", "protein", "fat"]),
 });
 
-const CreateUserSchema = z.object({
-  telegramId: z.number().int().positive(),
-  username: z.string().min(1).max(100).optional(),
-});
-
 export class UserController {
   async createOrGetUser(req: Request, res: Response, next: NextFunction) {
     try {
-      const parsed = CreateUserSchema.safeParse(req.body);
-      if (!parsed.success) {
-        throw new AppError("Неверные данные запроса", 400, true, parsed.error);
+      const telegramId = req.user?.telegram_id;
+      if (!telegramId) {
+        throw new AppError("Требуется аутентификация Telegram", 401);
       }
 
-      const { telegramId, username } = parsed.data;
-      const result = await supabaseService.createOrGetUser(telegramId, username);
+      const username = req.user?.username;
+      const result = await mysqlService.createOrGetUser(telegramId, username);
 
       res.status(200).json({
         success: true,
@@ -36,19 +32,18 @@ export class UserController {
 
   async getUserInfo(req: Request, res: Response, next: NextFunction) {
     try {
-      const { userId } = req.params;
-      if (!userId) {
+      const { userId } = req.params as { userId: string };
+      const telegramId = parseTelegramId(userId);
+      if (!telegramId) {
         throw new AppError("ID пользователя обязателен", 400);
       }
 
-      const { data, error } = await supabaseService
-        .getClient()
-        .from("users")
-        .select("*")
-        .eq("id", userId)
-        .single();
+      if (req.user?.telegram_id !== telegramId) {
+        throw new AppError("Нет доступа", 403);
+      }
 
-      if (error || !data) {
+      const data = await mysqlService.getUserByTelegramId(telegramId);
+      if (!data) {
         throw new AppError("Пользователь не найден", 404);
       }
 
@@ -60,12 +55,17 @@ export class UserController {
 
   async getUserIngredients(req: Request, res: Response, next: NextFunction) {
     try {
-      const { userId } = req.params;
-      if (!userId) {
+      const { userId } = req.params as { userId: string };
+      const telegramId = parseTelegramId(userId);
+      if (!telegramId) {
         throw new AppError("ID пользователя обязателен", 400);
       }
 
-      const ingredients = await supabaseService.getUserIngredients(userId);
+      if (req.user?.telegram_id !== telegramId) {
+        throw new AppError("Нет доступа", 403);
+      }
+
+      const ingredients = await mysqlService.getUserIngredients(telegramId);
       res.status(200).json({ success: true, data: ingredients });
     } catch (error) {
       next(error);
@@ -74,8 +74,9 @@ export class UserController {
 
   async addUserIngredient(req: Request, res: Response, next: NextFunction) {
     try {
-      const { userId } = req.params;
-      if (!userId) {
+      const { userId } = req.params as { userId: string };
+      const telegramId = parseTelegramId(userId);
+      if (!telegramId) {
         throw new AppError("ID пользователя обязателен", 400);
       }
 
@@ -84,8 +85,12 @@ export class UserController {
         throw new AppError("Неверные данные запроса", 400, true, parsed.error);
       }
 
-      const ingredient = await supabaseService.addUserIngredient(
-        userId,
+      if (req.user?.telegram_id !== telegramId) {
+        throw new AppError("Нет доступа", 403);
+      }
+
+      const ingredient = await mysqlService.addUserIngredient(
+        telegramId,
         parsed.data.name,
         parsed.data.category,
       );
@@ -102,13 +107,21 @@ export class UserController {
 
   async deleteUserIngredient(req: Request, res: Response, next: NextFunction) {
     try {
-      const { userId, ingredientId } = req.params;
-      if (!userId || !ingredientId) {
+      const { userId, ingredientId } = req.params as {
+        userId: string;
+        ingredientId: string;
+      };
+      const telegramId = parseTelegramId(userId);
+      if (!telegramId || !ingredientId) {
         throw new AppError("ID пользователя и ингредиента обязательны", 400);
       }
 
-      const ok = await supabaseService.deleteUserIngredient(
-        userId,
+      if (req.user?.telegram_id !== telegramId) {
+        throw new AppError("Нет доступа", 403);
+      }
+
+      const ok = await mysqlService.deleteUserIngredient(
+        telegramId,
         ingredientId,
       );
 
@@ -124,12 +137,17 @@ export class UserController {
 
   async getUserStats(req: Request, res: Response, next: NextFunction) {
     try {
-      const { userId } = req.params;
-      if (!userId) {
+      const { userId } = req.params as { userId: string };
+      const telegramId = parseTelegramId(userId);
+      if (!telegramId) {
         throw new AppError("ID пользователя обязателен", 400);
       }
 
-      const stats = await supabaseService.getUserStats(userId);
+      if (req.user?.telegram_id !== telegramId) {
+        throw new AppError("Нет доступа", 403);
+      }
+
+      const stats = await mysqlService.getUserStats(telegramId);
       if (!stats) {
         throw new AppError("Не удалось получить статистику", 500);
       }
