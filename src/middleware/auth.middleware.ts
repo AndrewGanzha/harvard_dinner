@@ -41,8 +41,14 @@ const parseInitData = (initData: string): InitDataValidationResult => {
     return { ok: false, error: "INIT_DATA_EXPIRED" };
   }
 
-  const dataCheckString = [...params.entries()]
-    .filter(([key]) => key !== "hash")
+  const entries: Array<[string, string]> = [];
+  params.forEach((value, key) => {
+    if (key !== "hash") {
+      entries.push([key, value]);
+    }
+  });
+
+  const dataCheckString = entries
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, value]) => `${key}=${value}`)
     .join("\n");
