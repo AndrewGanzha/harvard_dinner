@@ -1,6 +1,6 @@
 import mysql, { Pool, RowDataPacket, ResultSetHeader } from "mysql2/promise";
 import dotenv from "dotenv";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "crypto";
 
 dotenv.config();
 
@@ -164,7 +164,7 @@ export class MysqlService {
     category: IngredientCategory,
   ): Promise<IngredientRow | null> {
     try {
-      const id = uuidv4();
+      const id = randomUUID();
       await this.pool.execute<ResultSetHeader>(
         "insert into user_ingredients (id, telegram_id, name, category, created_at) values (?, ?, ?, ?, now()) on duplicate key update category = values(category)",
         [id, telegramId, name, category],
@@ -205,7 +205,7 @@ export class MysqlService {
     recipeData?: any,
   ): Promise<PlateRow | null> {
     try {
-      const id = uuidv4();
+      const id = randomUUID();
       await this.pool.execute<ResultSetHeader>(
         "insert into saved_plates (id, telegram_id, name, ingredients, recipe_data, created_at) values (?, ?, ?, ?, ?, now())",
         [
@@ -279,7 +279,7 @@ export class MysqlService {
       await this.pool.execute<ResultSetHeader>(
         "insert into recipe_history (id, telegram_id, request_data, response_data, gigachat_usage, created_at) values (?, ?, ?, ?, ?, now())",
         [
-          uuidv4(),
+          randomUUID(),
           telegramId,
           JSON.stringify(requestData || {}),
           responseData ? JSON.stringify(responseData) : null,

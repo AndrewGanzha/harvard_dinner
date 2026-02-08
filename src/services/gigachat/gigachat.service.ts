@@ -1,6 +1,6 @@
 import GigaChat from "gigachat";
 import dotenv from "dotenv";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "crypto";
 
 dotenv.config();
 
@@ -122,7 +122,7 @@ export class GigaChatService {
       const parsed = this.parseRecipeResponse(content);
 
       return {
-        id: uuidv4(),
+        id: randomUUID(),
         ...parsed,
         usage: {
           prompt_tokens: response.usage?.prompt_tokens || 0,
