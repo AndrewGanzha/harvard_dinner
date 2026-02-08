@@ -184,7 +184,7 @@ export class PostgresService {
         "delete from user_ingredients where id = $1 and telegram_id = $2",
         [ingredientId, telegramId],
       );
-      return result.rowCount > 0;
+      return (result.rowCount ?? 0) > 0;
     } catch (error) {
       console.error("❌ Error deleting ingredient:", error);
       return false;
@@ -250,7 +250,7 @@ export class PostgresService {
         "delete from saved_plates where id = $1 and telegram_id = $2",
         [plateId, telegramId],
       );
-      return result.rowCount > 0;
+      return (result.rowCount ?? 0) > 0;
     } catch (error) {
       console.error("❌ Error deleting plate:", error);
       return false;
