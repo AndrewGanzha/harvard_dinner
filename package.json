@@ -29,8 +29,7 @@
     "express-rate-limit": "^8.2.1",
     "gigachat": "^0.0.18",
     "helmet": "^8.1.0",
-    "mysql2": "^3.14.2",
-    "uuid": "^13.0.0",
+    "pg": "^8.16.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {

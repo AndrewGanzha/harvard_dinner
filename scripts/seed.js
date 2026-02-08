@@ -7,9 +7,9 @@ const dotenv = require("dotenv");
 dotenv.config();
 
 const projectRoot = path.resolve(__dirname, "..");
-const dbUser = process.env.MYSQL_USER;
-const dbPassword = process.env.MYSQL_PASSWORD;
-const dbName = process.env.MYSQL_DATABASE;
+const dbUser = process.env.PGUSER || process.env.POSTGRES_USER;
+const dbPassword = process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD;
+const dbName = process.env.PGDATABASE || process.env.POSTGRES_DB;
 
 const sql = `
 insert into users (telegram_id, username, email)
@@ -18,7 +18,7 @@ on duplicate key update username = values(username);
 `;
 
 if (!dbUser || !dbPassword || !dbName) {
-  console.error("MySQL credentials are missing in environment variables.");
+  console.error("PostgreSQL credentials are missing in environment variables.");
   process.exit(1);
 }
 
@@ -28,17 +28,18 @@ const result = spawnSync(
     "compose",
     "exec",
     "-T",
-    "mysql",
-    "mysql",
-    "-u",
+    "postgres",
+    "psql",
+    "-U",
     dbUser,
+    "-d",
     dbName,
   ],
   {
     cwd: projectRoot,
     input: sql,
     encoding: "utf8",
-    env: { ...process.env, MYSQL_PWD: dbPassword },
+    env: { ...process.env, PGPASSWORD: dbPassword },
   },
 );
 

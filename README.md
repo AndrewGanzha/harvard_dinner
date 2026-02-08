@@ -89,7 +89,7 @@ POST /api/plates
 GET /api/plates/:userId
 ```
 
-## Docker и миграции
+## Docker и миграции (PostgreSQL)
 
 ```
 docker compose up -d

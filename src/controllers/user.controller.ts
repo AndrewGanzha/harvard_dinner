@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { mysqlService } from "../services/mysql/mysql.service";
+import { postgresService } from "../services/postgres/postgres.service";
 import { AppError } from "../middleware/error.middleware";
 import { z } from "zod";
 import { parseTelegramId } from "../utils/telegram";
@@ -18,7 +18,10 @@ export class UserController {
       }
 
       const username = req.user?.username;
-      const result = await mysqlService.createOrGetUser(telegramId, username);
+      const result = await postgresService.createOrGetUser(
+        telegramId,
+        username,
+      );
 
       res.status(200).json({
         success: true,
@@ -42,7 +45,7 @@ export class UserController {
         throw new AppError("Нет доступа", 403);
       }
 
-      const data = await mysqlService.getUserByTelegramId(telegramId);
+      const data = await postgresService.getUserByTelegramId(telegramId);
       if (!data) {
         throw new AppError("Пользователь не найден", 404);
       }
@@ -65,7 +68,7 @@ export class UserController {
         throw new AppError("Нет доступа", 403);
       }
 
-      const ingredients = await mysqlService.getUserIngredients(telegramId);
+      const ingredients = await postgresService.getUserIngredients(telegramId);
       res.status(200).json({ success: true, data: ingredients });
     } catch (error) {
       next(error);
@@ -89,7 +92,7 @@ export class UserController {
         throw new AppError("Нет доступа", 403);
       }
 
-      const ingredient = await mysqlService.addUserIngredient(
+      const ingredient = await postgresService.addUserIngredient(
         telegramId,
         parsed.data.name,
         parsed.data.category,
@@ -120,7 +123,7 @@ export class UserController {
         throw new AppError("Нет доступа", 403);
       }
 
-      const ok = await mysqlService.deleteUserIngredient(
+      const ok = await postgresService.deleteUserIngredient(
         telegramId,
         ingredientId,
       );
@@ -147,7 +150,7 @@ export class UserController {
         throw new AppError("Нет доступа", 403);
       }
 
-      const stats = await mysqlService.getUserStats(telegramId);
+      const stats = await postgresService.getUserStats(telegramId);
       if (!stats) {
         throw new AppError("Не удалось получить статистику", 500);
       }

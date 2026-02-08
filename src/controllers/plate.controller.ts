@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { mysqlService } from "../services/mysql/mysql.service";
+import { postgresService } from "../services/postgres/postgres.service";
 import { AppError } from "../middleware/error.middleware";
 import { z } from "zod";
 import { parseTelegramId } from "../utils/telegram";
@@ -36,7 +36,7 @@ export class PlateController {
         throw new AppError("Нет доступа", 403);
       }
 
-      const plate = await mysqlService.saveUserPlate(
+      const plate = await postgresService.saveUserPlate(
         telegramId,
         ingredients,
         name,
@@ -65,7 +65,7 @@ export class PlateController {
         throw new AppError("Нет доступа", 403);
       }
 
-      const plates = await mysqlService.getUserPlates(telegramId);
+      const plates = await postgresService.getUserPlates(telegramId);
       res.status(200).json({ success: true, data: plates });
     } catch (error) {
       next(error);
@@ -87,7 +87,7 @@ export class PlateController {
         throw new AppError("Нет доступа", 403);
       }
 
-      const ok = await mysqlService.deleteUserPlate(telegramId, plateId);
+      const ok = await postgresService.deleteUserPlate(telegramId, plateId);
       if (!ok) {
         throw new AppError("Не удалось удалить тарелку", 500);
       }

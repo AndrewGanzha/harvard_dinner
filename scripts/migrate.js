@@ -12,13 +12,13 @@ const migrationsDir = path.join(
   projectRoot,
   "src",
   "services",
-  "mysql",
+  "postgres",
   "migrations",
 );
 
-const dbUser = process.env.MYSQL_USER;
-const dbPassword = process.env.MYSQL_PASSWORD;
-const dbName = process.env.MYSQL_DATABASE;
+const dbUser = process.env.PGUSER || process.env.POSTGRES_USER;
+const dbPassword = process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD;
+const dbName = process.env.PGDATABASE || process.env.POSTGRES_DB;
 
 function runDockerCompose(args, options = {}) {
   const result = spawnSync("docker", ["compose", ...args], {
@@ -35,35 +35,36 @@ function runDockerCompose(args, options = {}) {
   return result.stdout ? result.stdout.trim() : "";
 }
 
-function runMysqlSql(sql) {
+function runPsqlSql(sql) {
   return runDockerCompose(
     [
       "exec",
       "-T",
-      "mysql",
-      "mysql",
-      "-N",
-      "-B",
-      "-u",
+      "postgres",
+      "psql",
+      "-U",
       dbUser,
+      "-d",
       dbName,
-      "-e",
+      "-t",
+      "-A",
+      "-c",
       sql,
     ],
     {
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, MYSQL_PWD: dbPassword },
+      env: { ...process.env, PGPASSWORD: dbPassword },
     },
   );
 }
 
 function applyMigrationSql(sql) {
   runDockerCompose(
-    ["exec", "-T", "mysql", "mysql", "-u", dbUser, dbName],
+    ["exec", "-T", "postgres", "psql", "-U", dbUser, "-d", dbName],
     {
       input: sql,
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, MYSQL_PWD: dbPassword },
+      env: { ...process.env, PGPASSWORD: dbPassword },
     },
   );
 }
@@ -71,26 +72,26 @@ function applyMigrationSql(sql) {
 function ensureDbRunning() {
   const services = runDockerCompose(["ps", "--services", "--filter", "status=running"]);
   const running = services.split("\n").map((line) => line.trim());
-  if (!running.includes("mysql")) {
+  if (!running.includes("postgres")) {
     throw new Error(
-      "Container mysql is not running. Start stack first: docker compose up -d",
+      "Container postgres is not running. Start stack first: docker compose up -d",
     );
   }
 }
 
 function ensureMigrationsTable() {
-  runMysqlSql(`
-    create table if not exists schema_migrations (
-      version varchar(255) primary key,
-      applied_at datetime not null default current_timestamp
+  runPsqlSql(`
+    create table if not exists public.schema_migrations (
+      version text primary key,
+      applied_at timestamptz not null default now()
     );
   `);
 }
 
 function getAppliedMigrations() {
-  const out = runMysqlSql(`
+  const out = runPsqlSql(`
     select version
-    from schema_migrations
+    from public.schema_migrations
     order by version;
   `);
 
@@ -100,10 +101,10 @@ function getAppliedMigrations() {
 
 function recordMigration(version) {
   const escaped = version.replace(/'/g, "''");
-  runMysqlSql(`
-    insert into schema_migrations (version)
+  runPsqlSql(`
+    insert into public.schema_migrations (version)
     values ('${escaped}')
-    on duplicate key update version = version;
+    on conflict (version) do nothing;
   `);
 }
 
@@ -120,7 +121,7 @@ function getMigrationFiles() {
 
 function main() {
   if (!dbUser || !dbPassword || !dbName) {
-    throw new Error("MySQL credentials are missing in environment variables.");
+    throw new Error("PostgreSQL credentials are missing in environment variables.");
   }
 
   ensureDbRunning();

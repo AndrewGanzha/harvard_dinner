@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { gigaChatService } from "../services/gigachat/gigachat.service";
-import { mysqlService } from "../services/mysql/mysql.service";
+import { postgresService } from "../services/postgres/postgres.service";
 import { AppError } from "../middleware/error.middleware";
 import { parseTelegramId } from "../utils/telegram";
 
@@ -55,7 +55,7 @@ export class RecipeController {
 
       const recipe = await gigaChatService.generateRecipe(requestData);
 
-      await mysqlService.logRecipeRequest(
+      await postgresService.logRecipeRequest(
         telegramId,
         requestData,
         recipe,
@@ -63,7 +63,7 @@ export class RecipeController {
       );
 
       if (req.query.savePlate === "true") {
-        await mysqlService.saveUserPlate(
+        await postgresService.saveUserPlate(
           telegramId,
           requestData.ingredients,
           recipe.title,
@@ -103,7 +103,7 @@ export class RecipeController {
         throw new AppError("Нет доступа", 403);
       }
 
-      const history = await mysqlService.getUserRecipeHistory(
+      const history = await postgresService.getUserRecipeHistory(
         telegramId,
         limit,
       );
@@ -135,7 +135,7 @@ export class RecipeController {
         });
       }
 
-      const historyItem = await mysqlService.getRecipeHistoryItem(historyId);
+      const historyItem = await postgresService.getRecipeHistoryItem(historyId);
       if (!historyItem) {
         return res.status(404).json({
           error: "История не найдена",

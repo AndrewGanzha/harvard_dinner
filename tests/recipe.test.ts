@@ -35,8 +35,8 @@ jest.mock("../src/services/gigachat/gigachat.service", () => ({
   },
 }));
 
-jest.mock("../src/services/mysql/mysql.service", () => ({
-  mysqlService: {
+jest.mock("../src/services/postgres/postgres.service", () => ({
+  postgresService: {
     logRecipeRequest: async () => undefined,
   },
 }));
