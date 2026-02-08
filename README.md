@@ -91,6 +91,9 @@ GET /api/plates/:userId
 
 ## Docker и миграции (PostgreSQL)
 
+Миграции запускаются автоматически при старте. Отключить можно, задав
+`AUTO_MIGRATE=false`.
+
 ```
 docker compose up -d
 npm run db:migrate

@@ -1,22 +1,10 @@
-#!/usr/bin/env node
+import { Pool } from "pg";
+import fs from "fs";
+import path from "path";
 
-const fs = require("fs");
-const path = require("path");
-const dotenv = require("dotenv");
-const { Pool } = require("pg");
+type PoolConfig = ConstructorParameters<typeof Pool>[0];
 
-dotenv.config();
-
-const projectRoot = path.resolve(__dirname, "..");
-const migrationsDir = path.join(
-  projectRoot,
-  "src",
-  "services",
-  "postgres",
-  "migrations",
-);
-
-function getPoolConfig() {
+const getPoolConfig = (): PoolConfig => {
   const connectionString = process.env.DATABASE_URL;
   const host = process.env.PGHOST;
   const port = Number(process.env.PGPORT || 5432);
@@ -41,28 +29,27 @@ function getPoolConfig() {
     password,
     ssl: sslEnabled ? { rejectUnauthorized: false } : undefined,
   };
-}
+};
 
-async function ensureMigrationsTable(pool) {
+const ensureMigrationsTable = async (pool: Pool) => {
   await pool.query(`
     create table if not exists public.schema_migrations (
       version text primary key,
       applied_at timestamptz not null default now()
     );
   `);
-}
+};
 
-async function getAppliedMigrations(pool) {
-  const result = await pool.query(`
+const getAppliedMigrations = async (pool: Pool) => {
+  const result = await pool.query<{ version: string }>(`
     select version
     from public.schema_migrations
     order by version;
   `);
-
   return new Set(result.rows.map((row) => row.version));
-}
+};
 
-async function recordMigration(pool, version) {
+const recordMigration = async (pool: Pool, version: string) => {
   await pool.query(
     `
       insert into public.schema_migrations (version)
@@ -71,9 +58,10 @@ async function recordMigration(pool, version) {
     `,
     [version],
   );
-}
+};
 
-function getMigrationFiles() {
+const getMigrationFiles = () => {
+  const migrationsDir = path.join(__dirname, "migrations");
   if (!fs.existsSync(migrationsDir)) {
     throw new Error(`Migrations directory not found: ${migrationsDir}`);
   }
@@ -81,44 +69,34 @@ function getMigrationFiles() {
   return fs
     .readdirSync(migrationsDir)
     .filter((file) => file.endsWith(".sql"))
-    .sort((a, b) => a.localeCompare(b));
-}
+    .sort((a, b) => a.localeCompare(b))
+    .map((file) => ({ file, fullPath: path.join(migrationsDir, file) }));
+};
 
-async function main() {
+export const runMigrationsIfNeeded = async () => {
+  const autoMigrate =
+    process.env.AUTO_MIGRATE === undefined ||
+    process.env.AUTO_MIGRATE === "true" ||
+    process.env.AUTO_MIGRATE === "1";
+
+  if (!autoMigrate) {
+    return;
+  }
+
   const pool = new Pool(getPoolConfig());
-
   try {
     await ensureMigrationsTable(pool);
-
     const files = getMigrationFiles();
     const applied = await getAppliedMigrations(pool);
 
-    if (files.length === 0) {
-      console.log("No migration files found.");
-      return;
-    }
-
-    for (const file of files) {
-      if (applied.has(file)) {
-        console.log(`skip ${file}`);
-        continue;
-      }
-
-      const fullPath = path.join(migrationsDir, file);
+    for (const { file, fullPath } of files) {
+      if (applied.has(file)) continue;
       const sql = fs.readFileSync(fullPath, "utf8");
-
-      console.log(`apply ${file}`);
       await pool.query(sql);
       await recordMigration(pool, file);
+      console.log(`✅ Applied migration: ${file}`);
     }
-
-    console.log("Migrations finished.");
   } finally {
     await pool.end();
   }
-}
-
-main().catch((error) => {
-  console.error(error.message);
-  process.exit(1);
-});
+};

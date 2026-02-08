@@ -1,52 +1,57 @@
 #!/usr/bin/env node
 
-const { spawnSync } = require("child_process");
 const path = require("path");
 const dotenv = require("dotenv");
+const { Pool } = require("pg");
 
 dotenv.config();
 
 const projectRoot = path.resolve(__dirname, "..");
-const dbUser = process.env.PGUSER || process.env.POSTGRES_USER;
-const dbPassword = process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD;
-const dbName = process.env.PGDATABASE || process.env.POSTGRES_DB;
 
 const sql = `
 insert into users (telegram_id, username, email)
 values (100000001, 'demo_user', 'demo@example.com')
-on duplicate key update username = values(username);
+on conflict (telegram_id) do update set username = excluded.username;
 `;
 
-if (!dbUser || !dbPassword || !dbName) {
-  console.error("PostgreSQL credentials are missing in environment variables.");
-  process.exit(1);
+function getPoolConfig() {
+  const connectionString = process.env.DATABASE_URL;
+  const host = process.env.PGHOST;
+  const port = Number(process.env.PGPORT || 5432);
+  const database = process.env.PGDATABASE || process.env.POSTGRES_DB;
+  const user = process.env.PGUSER || process.env.POSTGRES_USER;
+  const password = process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD;
+  const sslEnabled =
+    process.env.PGSSL === "true" ||
+    process.env.PGSSL === "1" ||
+    (connectionString ? connectionString.includes("sslmode=require") : false);
+
+  if (!connectionString && (!host || !database || !user || !password)) {
+    throw new Error("PostgreSQL credentials are missing in environment variables.");
+  }
+
+  return {
+    connectionString: connectionString || undefined,
+    host,
+    port,
+    database,
+    user,
+    password,
+    ssl: sslEnabled ? { rejectUnauthorized: false } : undefined,
+  };
 }
 
-const result = spawnSync(
-  "docker",
-  [
-    "compose",
-    "exec",
-    "-T",
-    "postgres",
-    "psql",
-    "-U",
-    dbUser,
-    "-d",
-    dbName,
-  ],
-  {
-    cwd: projectRoot,
-    input: sql,
-    encoding: "utf8",
-    env: { ...process.env, PGPASSWORD: dbPassword },
-  },
-);
-
-if (result.status !== 0) {
-  const stderr = result.stderr ? result.stderr.trim() : "unknown error";
-  console.error(`seed failed: ${stderr}`);
-  process.exit(1);
+async function main() {
+  const pool = new Pool(getPoolConfig());
+  try {
+    await pool.query(sql);
+    console.log("Seed finished.");
+  } finally {
+    await pool.end();
+  }
 }
 
-console.log("Seed finished.");
+main().catch((error) => {
+  console.error(`seed failed: ${error.message}`);
+  process.exit(1);
+});

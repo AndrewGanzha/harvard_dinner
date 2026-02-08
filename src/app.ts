@@ -13,6 +13,7 @@ import healthRoutes from "./routes/health.routes";
 // Импорт middleware
 import { errorHandler } from "./middleware/error.middleware";
 import { rateLimiter } from "./middleware/rate-limit.middleware";
+import { runMigrationsIfNeeded } from "./services/postgres/migrate";
 
 // Загрузка переменных окружения
 dotenv.config();
@@ -78,7 +79,9 @@ class App {
     this.app.use(errorHandler);
   }
 
-  public listen(): void {
+  public async listen(): Promise<void> {
+    await runMigrationsIfNeeded();
+
     this.app.listen(this.port, () => {
       console.log(`🚀 Сервер запущен на порту ${this.port}`);
       console.log(`🔗 URL: http://localhost:${this.port}`);
@@ -91,5 +94,8 @@ export default App;
 
 if (require.main === module) {
   const server = new App();
-  server.listen();
+  server.listen().catch((error) => {
+    console.error("❌ Ошибка запуска сервера:", error);
+    process.exit(1);
+  });
 }
