@@ -230,7 +230,7 @@ export class PostgresService {
         [telegramId],
       );
 
-      return result.rows.map((plate) => ({
+      return result.rows.map((plate: PlateRow) => ({
         ...plate,
         ingredients: this.parseJson(plate.ingredients, []),
         recipe_data: this.parseJson(plate.recipe_data, null),
@@ -289,7 +289,7 @@ export class PostgresService {
         [telegramId, limit],
       );
 
-      return result.rows.map((item) => ({
+      return result.rows.map((item: RecipeHistoryRow) => ({
         ...item,
         request_data: this.parseJson(item.request_data, {}),
         response_data: this.parseJson(item.response_data, null),
